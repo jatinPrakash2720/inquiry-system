@@ -28,8 +28,8 @@ export default function Home() {
     const assistantMessageIndex = currentLength + 1; // user message + assistant message
     
     setMessages(prev => {
-      const updated = [...prev, { role: 'user', content: userMessage }];
-      updated.push({ role: 'assistant', content: '' });
+      const updated: Message[] = [...prev, { role: 'user' as const, content: userMessage }];
+      updated.push({ role: 'assistant' as const, content: '' });
       return updated;
     });
 
@@ -59,9 +59,9 @@ export default function Home() {
       if (!response.ok) {
         const errorData = await response.json();
         setMessages(prev => {
-          const updated = [...prev];
+          const updated: Message[] = [...prev];
           updated[assistantMessageIndex] = { 
-            role: 'assistant', 
+            role: 'assistant' as const, 
             content: `Error: ${errorData.error || 'Something went wrong'}` 
           };
           return updated;
@@ -120,9 +120,9 @@ export default function Home() {
                 }
                 
                 setMessages(prev => {
-                  const updated = [...prev];
+                  const updated: Message[] = [...prev];
                   updated[assistantMessageIndex] = { 
-                    role: 'assistant', 
+                    role: 'assistant' as const, 
                     content: accumulatedContent 
                   };
                   return updated;
@@ -138,9 +138,9 @@ export default function Home() {
                 setConversationId(null);
                 // Replace the message with just a simple confirmation
                 setMessages(prev => {
-                  const updated = [...prev];
+                  const updated: Message[] = [...prev];
                   updated[assistantMessageIndex] = { 
-                    role: 'assistant', 
+                    role: 'assistant' as const, 
                     content: 'Here\'s your refined query!' 
                   };
                   return updated;
@@ -149,9 +149,9 @@ export default function Home() {
                 return;
               } else if (data.type === 'error') {
                 setMessages(prev => {
-                  const updated = [...prev];
+                  const updated: Message[] = [...prev];
                   updated[assistantMessageIndex] = { 
-                    role: 'assistant', 
+                    role: 'assistant' as const, 
                     content: `Error: ${data.content}` 
                   };
                   return updated;
@@ -168,9 +168,9 @@ export default function Home() {
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => {
-        const updated = [...prev];
+        const updated: Message[] = [...prev];
         updated[assistantMessageIndex] = { 
-          role: 'assistant', 
+          role: 'assistant' as const, 
           content: 'Sorry, something went wrong. Please try again.' 
         };
         return updated;
