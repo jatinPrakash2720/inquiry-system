@@ -12,8 +12,8 @@ export async function POST(request: Request) {
     }
 
     const url = stream
-      ? "http://127.0.0.1:8000/inquire/continue/stream"
-      : "http://127.0.0.1:8000/inquire/continue";
+      ? `${process.env.NEXT_PUBLIC_API_URL}/inquire/continue/stream`
+      : `${process.env.NEXT_PUBLIC_API_URL}/inquire/continue`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
+          Connection: "keep-alive",
         },
       });
     }

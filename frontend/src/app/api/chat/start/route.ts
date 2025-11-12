@@ -12,8 +12,8 @@ export async function POST(request: Request) {
     }
 
     const url = stream
-      ? "http://127.0.0.1:8000/inquire/start/stream"
-      : "http://127.0.0.1:8000/inquire/start";
+      ? `${process.env.NEXT_PUBLIC_API_URL}/inquire/start/stream`
+      : `${process.env.NEXT_PUBLIC_API_URL}/inquire/start`;
 
     const response = await fetch(url, {
       method: "POST",
