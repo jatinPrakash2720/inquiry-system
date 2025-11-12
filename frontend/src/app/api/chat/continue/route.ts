@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     const { conversation_id, answer, stream } = await request.json();
@@ -11,9 +14,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     const url = stream
-      ? `${process.env.NEXT_PUBLIC_API_URL}/inquire/continue/stream`
-      : `${process.env.NEXT_PUBLIC_API_URL}/inquire/continue`;
+      ? `${apiUrl}/inquire/continue/stream`
+      : `${apiUrl}/inquire/continue`;
 
     const response = await fetch(url, {
       method: "POST",
