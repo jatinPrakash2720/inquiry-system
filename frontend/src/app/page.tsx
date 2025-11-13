@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useState } from "react";
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
 }
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [refinedQuery, setRefinedQuery] = useState<string | null>(null);
@@ -20,49 +20,52 @@ export default function Home() {
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
-    setInput('');
+    setInput("");
     setIsLoading(true);
 
     // Add user message to chat and empty assistant message for streaming
     const currentLength = messages.length;
     const assistantMessageIndex = currentLength + 1; // user message + assistant message
-    
-    setMessages(prev => {
-      const updated: Message[] = [...prev, { role: 'user' as const, content: userMessage }];
-      updated.push({ role: 'assistant' as const, content: '' });
+
+    setMessages((prev) => {
+      const updated: Message[] = [
+        ...prev,
+        { role: "user" as const, content: userMessage },
+      ];
+      updated.push({ role: "assistant" as const, content: "" });
       return updated;
     });
 
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
       let response;
-      
       if (!conversationId) {
-        // Start new conversation with streaming
-        response = await fetch('/api/chat/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: userMessage, stream: true }),
+        // Start new conversation with streaming - call FastAPI directly
+        response = await fetch(`${apiUrl}/inquire/start/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: userMessage }),
         });
       } else {
-        // Continue conversation with streaming
-        response = await fetch('/api/chat/continue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+        // Continue conversation with streaming - call FastAPI directly
+        response = await fetch(`${apiUrl}/inquire/continue/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             conversation_id: conversationId,
             answer: userMessage,
-            stream: true
           }),
         });
       }
 
       if (!response.ok) {
-        const errorData = await response.json();
-        setMessages(prev => {
+        const errorText = await response.text();
+        setMessages((prev) => {
           const updated: Message[] = [...prev];
-          updated[assistantMessageIndex] = { 
-            role: 'assistant' as const, 
-            content: `Error: ${errorData.error || 'Something went wrong'}` 
+          updated[assistantMessageIndex] = {
+            role: "assistant" as const,
+            content: `Error: ${errorText || "Something went wrong"}`,
           };
           return updated;
         });
@@ -73,11 +76,11 @@ export default function Home() {
       // Handle SSE streaming
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
-      let accumulatedContent = '';
+      let buffer = "";
+      let accumulatedContent = "";
 
       if (!reader) {
-        throw new Error('No reader available');
+        throw new Error("No reader available");
       }
 
       while (true) {
@@ -85,32 +88,37 @@ export default function Home() {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-              
-              if (data.type === 'token') {
+
+              if (data.type === "token") {
                 accumulatedContent += data.content;
-                
+
                 // Check if chunk contains @FINAL_QUERY: prefix
-                if (accumulatedContent.includes('@FINAL_QUERY:') || accumulatedContent.toLowerCase().includes('@final_query:')) {
+                if (
+                  accumulatedContent.includes("@FINAL_QUERY:") ||
+                  accumulatedContent.toLowerCase().includes("@final_query:")
+                ) {
                   // Extract query after @FINAL_QUERY:
-                  const match = accumulatedContent.match(/@FINAL_QUERY:\s*(.+?)(?:\n\n|\n$|$)/i);
+                  const match = accumulatedContent.match(
+                    /@FINAL_QUERY:\s*(.+?)(?:\n\n|\n$|$)/i
+                  );
                   if (match) {
-                    const query = match[1].trim().split('\n')[0].trim();
+                    const query = match[1].trim().split("\n")[0].trim();
                     const formattedQuery = `User wants to say this: ${query}`;
                     setRefinedQuery(formattedQuery);
                     setShowPopup(true);
                     setConversationId(null);
-                    setMessages(prev => {
+                    setMessages((prev) => {
                       const updated = [...prev];
-                      updated[assistantMessageIndex] = { 
-                        role: 'assistant', 
-                        content: 'Here\'s your refined query!' 
+                      updated[assistantMessageIndex] = {
+                        role: "assistant",
+                        content: "Here's your refined query!",
                       };
                       return updated;
                     });
@@ -118,41 +126,41 @@ export default function Home() {
                     return;
                   }
                 }
-                
-                setMessages(prev => {
+
+                setMessages((prev) => {
                   const updated: Message[] = [...prev];
-                  updated[assistantMessageIndex] = { 
-                    role: 'assistant' as const, 
-                    content: accumulatedContent 
+                  updated[assistantMessageIndex] = {
+                    role: "assistant" as const,
+                    content: accumulatedContent,
                   };
                   return updated;
                 });
-              } else if (data.type === 'done') {
+              } else if (data.type === "done") {
                 setConversationId(data.conversation_id);
                 setIsLoading(false);
                 return;
-              } else if (data.type === 'final_query') {
+              } else if (data.type === "final_query") {
                 // Stop streaming and show popup
                 setRefinedQuery(data.refined_query);
                 setShowPopup(true);
                 setConversationId(null);
                 // Replace the message with just a simple confirmation
-                setMessages(prev => {
+                setMessages((prev) => {
                   const updated: Message[] = [...prev];
-                  updated[assistantMessageIndex] = { 
-                    role: 'assistant' as const, 
-                    content: 'Here\'s your refined query!' 
+                  updated[assistantMessageIndex] = {
+                    role: "assistant" as const,
+                    content: "Here's your refined query!",
                   };
                   return updated;
                 });
                 setIsLoading(false);
                 return;
-              } else if (data.type === 'error') {
-                setMessages(prev => {
+              } else if (data.type === "error") {
+                setMessages((prev) => {
                   const updated: Message[] = [...prev];
-                  updated[assistantMessageIndex] = { 
-                    role: 'assistant' as const, 
-                    content: `Error: ${data.content}` 
+                  updated[assistantMessageIndex] = {
+                    role: "assistant" as const,
+                    content: `Error: ${data.content}`,
                   };
                   return updated;
                 });
@@ -160,18 +168,18 @@ export default function Home() {
                 return;
               }
             } catch (e) {
-              console.error('Error parsing SSE data:', e);
+              console.error("Error parsing SSE data:", e);
             }
           }
         }
       }
     } catch (error) {
-      console.error('Error:', error);
-      setMessages(prev => {
+      console.error("Error:", error);
+      setMessages((prev) => {
         const updated: Message[] = [...prev];
-        updated[assistantMessageIndex] = { 
-          role: 'assistant' as const, 
-          content: 'Sorry, something went wrong. Please try again.' 
+        updated[assistantMessageIndex] = {
+          role: "assistant" as const,
+          content: "Sorry, something went wrong. Please try again.",
         };
         return updated;
       });
@@ -184,7 +192,7 @@ export default function Home() {
     setMessages([]);
     setConversationId(null);
     setRefinedQuery(null);
-    setInput('');
+    setInput("");
     setShowPopup(false);
   };
 
@@ -196,31 +204,47 @@ export default function Home() {
     <div className="flex min-h-screen bg-black text-white">
       {/* Popup Modal */}
       {showPopup && refinedQuery && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
           onClick={handleClosePopup}
         >
-          <div 
+          <div
             className="bg-zinc-900 border border-zinc-800 rounded-lg max-w-2xl w-full p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h2 className="text-xl font-semibold text-white">System Reference</h2>
-                <p className="text-sm text-zinc-400 mt-1">Use this as a reference for search</p>
+                <h2 className="text-xl font-semibold text-white">
+                  System Reference
+                </h2>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Use this as a reference for search
+                </p>
               </div>
               <button
                 onClick={handleClosePopup}
                 className="text-zinc-400 hover:text-white transition-colors"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
             <div className="bg-black border border-zinc-800 rounded-lg p-4 mb-4">
-              <p className="text-white text-lg leading-relaxed font-mono text-sm">{refinedQuery}</p>
+              <p className="text-white text-lg leading-relaxed font-mono text-sm">
+                {refinedQuery}
+              </p>
             </div>
             <div className="flex gap-3 justify-end">
               <button
@@ -256,23 +280,24 @@ export default function Home() {
               <p className="text-lg">Start a conversation to begin</p>
             </div>
           )}
-          
+
           {messages.map((message, index) => (
             <div
               key={index}
               className={`flex ${
-                message.role === 'user' ? 'justify-end' : 'justify-start'
+                message.role === "user" ? "justify-end" : "justify-start"
               }`}
             >
               <div
                 className={`max-w-[80%] rounded-lg px-4 py-3 ${
-                  message.role === 'user'
-                    ? 'bg-white text-black'
-                    : 'bg-zinc-900 text-white border border-zinc-800'
+                  message.role === "user"
+                    ? "bg-white text-black"
+                    : "bg-zinc-900 text-white border border-zinc-800"
                 }`}
               >
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {message.content || (isLoading && index === messages.length - 1 ? '...' : '')}
+                  {message.content ||
+                    (isLoading && index === messages.length - 1 ? "..." : "")}
                 </p>
               </div>
             </div>
@@ -282,7 +307,9 @@ export default function Home() {
 
           {refinedQuery && (
             <div className="mt-6 p-4 bg-zinc-900 border border-zinc-700 rounded-lg">
-              <p className="text-sm font-medium text-zinc-300 mb-2">Final Refined Query:</p>
+              <p className="text-sm font-medium text-zinc-300 mb-2">
+                Final Refined Query:
+              </p>
               <p className="text-white font-medium">{refinedQuery}</p>
             </div>
           )}
@@ -303,7 +330,11 @@ export default function Home() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={refinedQuery ? "Start a new conversation..." : "Type your message..."}
+              placeholder={
+                refinedQuery
+                  ? "Start a new conversation..."
+                  : "Type your message..."
+              }
               disabled={isLoading || !!refinedQuery}
               className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-700 disabled:opacity-50"
             />
