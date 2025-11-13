@@ -2,6 +2,7 @@ import dotenv
 import uvicorn 
 import re
 import json
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -31,21 +32,21 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 app = FastAPI()
 
 origins = [
-    "http://localhost:3000",  # For your local Next.js dev
-    # We will add the Vercel URL here later
+    "http://localhost:3000",
+    "https://inquiry-system-sable.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,       # Which origins can connect
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],         # Allow all methods (GET, POST, etc.)
-    allow_headers=["*"],         # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello, World!"}
+    return {"message": "Inquiry System API"}
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.8)
 
