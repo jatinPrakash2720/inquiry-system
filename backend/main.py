@@ -90,6 +90,10 @@ async def start_inquiry_stream(request:StartRequest):
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(content=request.message)
     ]
+    
+    # Store conversation immediately to prevent race conditions
+    # We'll update it after streaming completes
+    conversations_db[conversation_id] = history
 
     async def generate():
         full_content = ""
@@ -145,12 +149,14 @@ async def start_inquiry_stream(request:StartRequest):
                         break
                 
                 if query:
-                    del conversations_db[conversation_id]
+                    # Only delete if conversation exists (should always exist, but safe check)
+                    if conversation_id in conversations_db:
+                        del conversations_db[conversation_id]
                     formatted_query = f"User wants to say this: {query}"
                     yield f"data: {json.dumps({'type': 'final_query', 'refined_query': formatted_query})}\n\n"
                     return
         
-        # If not a final query, store and send done message
+        # If not a final query, update stored conversation and send done message
         ai_message = AIMessage(content=full_content)
         history.append(ai_message)
         conversations_db[conversation_id] = history
@@ -179,13 +185,22 @@ async def start_inquiry(request:StartRequest):
 
 @app.post("/inquire/continue/stream")
 async def continue_inquiry_stream(request:ContinueRequest):
+    print(f"Continue request - conversation_id: {request.conversation_id}")
+    print(f"Available conversations: {list(conversations_db.keys())}")
+    
     if request.conversation_id not in conversations_db:
         async def error_generate():
             yield f"data: {json.dumps({'type': 'error', 'content': 'Conversation not found.'})}\n\n"
         return StreamingResponse(error_generate(), media_type="text/event-stream")
     
     try:
-        history = conversations_db[request.conversation_id]
+        # Get history - check again in case it was deleted between check and access
+        if request.conversation_id not in conversations_db:
+            async def error_generate():
+                yield f"data: {json.dumps({'type': 'error', 'content': 'Conversation not found.'})}\n\n"
+            return StreamingResponse(error_generate(), media_type="text/event-stream")
+        
+        history = list(conversations_db[request.conversation_id])  # Create a new list
         history.append(HumanMessage(content=request.answer))
 
         async def generate():
@@ -237,7 +252,9 @@ async def continue_inquiry_stream(request:ContinueRequest):
                             break
                     
                     if query:
-                        del conversations_db[request.conversation_id]
+                        # Only delete if conversation exists
+                        if request.conversation_id in conversations_db:
+                            del conversations_db[request.conversation_id]
                         formatted_query = f"User wants to say this: {query}"
                         yield f"data: {json.dumps({'type': 'final_query', 'refined_query': formatted_query})}\n\n"
                         return
@@ -245,7 +262,9 @@ async def continue_inquiry_stream(request:ContinueRequest):
             # Continue conversation
             ai_message = AIMessage(content=full_content)
             history.append(ai_message)
-            conversations_db[request.conversation_id] = history
+            # Only update if conversation still exists (might have been deleted in race condition)
+            if request.conversation_id in conversations_db:
+                conversations_db[request.conversation_id] = history
             
             yield f"data: {json.dumps({'type': 'done', 'conversation_id': request.conversation_id, 'question': full_content})}\n\n"
         
@@ -272,7 +291,9 @@ async def continue_inquiry(request:ContinueRequest):
             match = re.search(r'@FINAL_QUERY:\s*(.+?)(?:\n\n|\n$|$)', response_content, re.IGNORECASE | re.DOTALL)
             if match:
                 query = match.group(1).strip().split('\n')[0].strip()
-                del conversations_db[request.conversation_id]
+                # Only delete if conversation exists
+                if request.conversation_id in conversations_db:
+                    del conversations_db[request.conversation_id]
                 # Format as system reference
                 formatted_query = f"User wants to say this: {query}"
                 return ApiResponse(refined_query=formatted_query)
