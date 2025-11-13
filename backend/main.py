@@ -34,6 +34,7 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "https://inquiry-system-sable.vercel.app",
+    "https://juli-lockable-contentedly.ngrok-free.dev",
 ]
 
 app.add_middleware(
