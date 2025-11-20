@@ -70,21 +70,13 @@ CRITICAL RULES:
 - Keep responses conversational and brief - don't overthink or be overly formal
 - After the 4th question (1 role + 3 clarifying), you MUST stop asking and output the final refined query
 
-IMPORTANT - SYMBOL USAGE:
-- NEVER use the @ symbol in your regular questions or responses
-- The @ symbol is ONLY used for the final query output
-- In all your clarifying questions and normal conversation, avoid using @ completely
-- Only use @ when outputting the final refined query
-
 When outputting the final query:
-- Start with the special character: @FINAL_QUERY:
+- Start with the phrase: "Here's your refined query:"
 - MUST include the user's role/profession at the beginning of the query
-- Format: @FINAL_QUERY: As a [role], [user's refined request with all context]
-- Example: @FINAL_QUERY: As a student learning web development, I need help debugging a React component that isn't rendering properly
-- Do NOT add "Here's your refined query" or any other text before @FINAL_QUERY:
+- Format: Here's your refined query: As a [role], [user's refined request with all context]
+- Example: Here's your refined query: As a student learning web development, I need help debugging a React component that isn't rendering properly
 - Do NOT add "Hope this helps!" or similar closing statements after the query
-- The @FINAL_QUERY: prefix is REQUIRED and must be the first thing when outputting the final query
-- This is the ONLY time you should ever use the @ symbol
+- The phrase "Here's your refined query:" is REQUIRED at the beginning of the final output
 
 Write like a real person would talk - natural, warm, and helpful. Avoid sounding like a robot or following a rigid script.
 """
@@ -112,12 +104,12 @@ async def start_inquiry_stream(request:StartRequest):
             if chunk.content:
                 full_content += chunk.content
                 
-                # Check if we detected @FINAL_QUERY: prefix
+                # Check if we detected "Here's your refined query:" phrase
                 if not found_final_query:
-                    if "@FINAL_QUERY:" in full_content or "@final_query:" in full_content.lower():
+                    if "here's your refined query:" in full_content.lower():
                         found_final_query = True
-                        # Extract content before @FINAL_QUERY: (should be empty per instructions, but just in case)
-                        prefix_match = re.search(r'@FINAL_QUERY:\s*', full_content, re.IGNORECASE)
+                        # Extract content before the phrase (should be empty per instructions, but just in case)
+                        prefix_match = re.search(r"here's your refined query:\s*", full_content, re.IGNORECASE)
                         if prefix_match:
                             content_before_final = full_content[:prefix_match.start()].strip()
                         # Stop sending tokens to frontend immediately
@@ -129,12 +121,12 @@ async def start_inquiry_stream(request:StartRequest):
         
         # After all chunks are received, extract the complete final query
         if found_final_query:
-            prefix_match = re.search(r'@FINAL_QUERY:\s*', full_content, re.IGNORECASE)
+            prefix_match = re.search(r"here's your refined query:\s*", full_content, re.IGNORECASE)
             if prefix_match:
                 query_start = prefix_match.end()
                 query_text = full_content[query_start:].strip()
                 
-                # Extract everything after @FINAL_QUERY: until double newline (paragraph break) or end
+                # Extract everything after "Here's your refined query:" until double newline (paragraph break) or end
                 # This captures the full query even if it spans multiple lines
                 query_lines = query_text.split('\n\n')
                 if query_lines:
@@ -219,9 +211,9 @@ async def continue_inquiry_stream(request:ContinueRequest):
                 if chunk.content:
                     full_content += chunk.content
                     
-                    # Check if we detected @FINAL_QUERY: prefix
+                    # Check if we detected "Here's your refined query:" phrase
                     if not found_final_query:
-                        if "@FINAL_QUERY:" in full_content or "@final_query:" in full_content.lower():
+                        if "here's your refined query:" in full_content.lower():
                             found_final_query = True
                             # Stop sending tokens to frontend immediately
                             # But continue accumulating all remaining chunks
@@ -232,12 +224,12 @@ async def continue_inquiry_stream(request:ContinueRequest):
             
             # After all chunks are received, extract the complete final query
             if found_final_query:
-                prefix_match = re.search(r'@FINAL_QUERY:\s*', full_content, re.IGNORECASE)
+                prefix_match = re.search(r"here's your refined query:\s*", full_content, re.IGNORECASE)
                 if prefix_match:
                     query_start = prefix_match.end()
                     query_text = full_content[query_start:].strip()
                     
-                    # Extract everything after @FINAL_QUERY: until double newline (paragraph break) or end
+                    # Extract everything after "Here's your refined query:" until double newline (paragraph break) or end
                     # This captures the full query even if it spans multiple lines
                     query_lines = query_text.split('\n\n')
                     if query_lines:
@@ -294,9 +286,9 @@ async def continue_inquiry(request:ContinueRequest):
         response = llm.invoke(history)
 
         response_content = response.content
-        if "@FINAL_QUERY:" in response_content or "@final_query:" in response_content.lower():
-            # Extract query after @FINAL_QUERY:
-            match = re.search(r'@FINAL_QUERY:\s*(.+?)(?:\n\n|\n$|$)', response_content, re.IGNORECASE | re.DOTALL)
+        if "here's your refined query:" in response_content.lower():
+            # Extract query after "Here's your refined query:"
+            match = re.search(r"here's your refined query:\s*(.+?)(?:\n\n|\n$|$)", response_content, re.IGNORECASE | re.DOTALL)
             if match:
                 query = match.group(1).strip().split('\n')[0].strip()
                 # Only delete if conversation exists
